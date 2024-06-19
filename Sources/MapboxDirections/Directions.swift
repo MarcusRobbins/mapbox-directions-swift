@@ -331,57 +331,57 @@ open class Directions: NSObject {
 //        return requestTask
 //    }
     
-    @discardableResult
-    open func calculate2(_ options: RouteOptions, completionHandler: @escaping RouteCompletionHandler) -> URLSessionDataTask {
-        options.fetchStartDate = Date()
-        let session = (options: options as DirectionsOptions, credentials: self.credentials)
-
-        // Create POST request for GraphHopper
-        let request = createGraphHopperRequest(forCalculating: options)
-        let requestTask = urlSession.dataTask(with: request) { (possibleData, possibleResponse, possibleError) in
-            if let urlError = possibleError as? URLError {
-                DispatchQueue.main.async {
-                    completionHandler(session, .failure(.network(urlError)))
-                }
-                return
-            }
+//    @discardableResult
+//    open func calculate2(_ options: RouteOptions, completionHandler: @escaping RouteCompletionHandler) -> URLSessionDataTask {
+//        options.fetchStartDate = Date()
+//        let session = (options: options as DirectionsOptions, credentials: self.credentials)
 //
-            guard let response = possibleResponse, ["application/json", "text/html"].contains(response.mimeType) else {
-                DispatchQueue.main.async {
-                    completionHandler(session, .failure(.invalidResponse(possibleResponse)))
-                }
-                return
-            }
+//        // Create POST request for GraphHopper
+//        let request = createGraphHopperRequest(forCalculating: options)
+//        let requestTask = urlSession.dataTask(with: request) { (possibleData, possibleResponse, possibleError) in
+//            if let urlError = possibleError as? URLError {
+//                DispatchQueue.main.async {
+//                    completionHandler(session, .failure(.network(urlError)))
+//                }
+//                return
+//            }
+////
+//            guard let response = possibleResponse, ["application/json", "text/html"].contains(response.mimeType) else {
+//                DispatchQueue.main.async {
+//                    completionHandler(session, .failure(.invalidResponse(possibleResponse)))
+//                }
+//                return
+//            }
+////
+//            guard let data = possibleData else {
+//                DispatchQueue.main.async {
+//                    completionHandler(session, .failure(.noData))
+//                }
+//                return
+//            }
+////
+//            self.processingQueue.async {
+//                do {
+//                    let decoder = JSONDecoder()
+//                    let routes = try decoder.decode(GraphHopperRouteResponse.self, from: data)
+//                    
+//                    DispatchQueue.main.async {
+//                        let routeResponse = self.convertToRouteResponse(routes, with: options)
+//                        completionHandler(session, .success(routeResponse))
+//                    }
+//                } catch {
+//                    DispatchQueue.main.async {
+//                        let bailError = DirectionsError(code: nil, message: nil, response: response, underlyingError: error)
+//                        completionHandler(session, .failure(bailError))
+//                    }
+//                }
+//            }
+//        }
+//        requestTask.priority = 1
+//        requestTask.resume()
 //
-            guard let data = possibleData else {
-                DispatchQueue.main.async {
-                    completionHandler(session, .failure(.noData))
-                }
-                return
-            }
-//
-            self.processingQueue.async {
-                do {
-                    let decoder = JSONDecoder()
-                    let routes = try decoder.decode(GraphHopperRouteResponse.self, from: data)
-                    
-                    DispatchQueue.main.async {
-                        let routeResponse = self.convertToRouteResponse(routes, with: options)
-                        completionHandler(session, .success(routeResponse))
-                    }
-                } catch {
-                    DispatchQueue.main.async {
-                        let bailError = DirectionsError(code: nil, message: nil, response: response, underlyingError: error)
-                        completionHandler(session, .failure(bailError))
-                    }
-                }
-            }
-        }
-        requestTask.priority = 1
-        requestTask.resume()
-
-        return requestTask
-    }
+//        return requestTask
+//    }
     
 //    open func calculate(_ options: RouteOptions, completionHandler: @escaping RouteCompletionHandler) -> URLSessionDataTask {
 //        options.fetchStartDate = Date()
@@ -458,105 +458,135 @@ open class Directions: NSObject {
 //        return requestTask
 //    }
     
-    open func calculate(_ options: RouteOptions, completionHandler: @escaping RouteCompletionHandler) -> URLSessionDataTask {
-        options.fetchStartDate = Date()
-        let session = (options: options as DirectionsOptions, credentials: self.credentials)
-
-        let request = createGraphHopperRequest(forCalculating: options)
-        let requestTask = urlSession.dataTask(with: request) { (possibleData, possibleResponse, possibleError) in
-            if let urlError = possibleError as? URLError {
-                DispatchQueue.main.async {
-                    completionHandler(session, .failure(.network(urlError)))
-                }
-                return
-            }
-
-            guard let response = possibleResponse, ["application/json", "text/html"].contains(response.mimeType) else {
-                DispatchQueue.main.async {
-                    completionHandler(session, .failure(.invalidResponse(possibleResponse)))
-                }
-                return
-            }
-
-            guard let data = possibleData else {
-                DispatchQueue.main.async {
-                    completionHandler(session, .failure(.noData))
-                }
-                return
-            }
-
-            self.processingQueue.async {
-                do {
-                    let decoder = JSONDecoder()
-                    let graphHopperResponse = try decoder.decode(GraphHopperRouteResponse.self, from: data)
-                    var uniqueIndices = Set<Int>()
-                    var selectedCoordinates: [LocationCoordinate2D] = []
-
-                    for path in graphHopperResponse.paths {
-                        let decodedPoints = self.decodePolyline(path.points, precision: 1e5) ?? []
-                        let instructionIndices = path.instructions.flatMap { $0.interval }
-                        uniqueIndices.formUnion(instructionIndices)
-                        
-                        let uniqueCoordinates = Array(uniqueIndices).sorted().compactMap { index in
-                            index < decodedPoints.count ? decodedPoints[index] : nil
-                        }
-                        
-                        // Limiting to 100 coordinates if there are more
-//                        selectedCoordinates.append(contentsOf: uniqueCoordinates)
-                        selectedCoordinates.append(contentsOf: decodedPoints)
-                        
-                    }
-                    
-                    selectedCoordinates = self.selectCoordinates(selectedCoordinates, maxCount: 100)
-                    
-                    var selectedWayPoints:[Waypoint] = []
-                    
-                    var i = 0
-                    for coordinate in selectedCoordinates {
-                        var waypoint = Waypoint(coordinate: coordinate)
-//                        if i == 0 {
-//                            waypoint.separatesLegs = true
-//                        } else if i == selectedCoordinates.count-1 {
-//                            waypoint.separatesLegs = true
-//                        } else {
-//                            waypoint.separatesLegs = false
+//    open func calculate(_ options: RouteOptions, completionHandler: @escaping RouteCompletionHandler) -> URLSessionDataTask {
+//        options.fetchStartDate = Date()
+//        let session = (options: options as DirectionsOptions, credentials: self.credentials)
+//
+//        let request = createGraphHopperRequest(forCalculating: options)
+//        let requestTask = urlSession.dataTask(with: request) { (possibleData, possibleResponse, possibleError) in
+//            if let urlError = possibleError as? URLError {
+//                DispatchQueue.main.async {
+//                    completionHandler(session, .failure(.network(urlError)))
+//                }
+//                return
+//            }
+//
+//            guard let response = possibleResponse, ["application/json", "text/html"].contains(response.mimeType) else {
+//                DispatchQueue.main.async {
+//                    completionHandler(session, .failure(.invalidResponse(possibleResponse)))
+//                }
+//                return
+//            }
+//
+//            guard let data = possibleData else {
+//                DispatchQueue.main.async {
+//                    completionHandler(session, .failure(.noData))
+//                }
+//                return
+//            }
+//
+//            self.processingQueue.async {
+//                do {
+//                    let decoder = JSONDecoder()
+//                    let graphHopperResponse = try decoder.decode(GraphHopperRouteResponse.self, from: data)
+//                    var uniqueIndices = Set<Int>()
+//                    var selectedCoordinates: [LocationCoordinate2D] = []
+//
+//                    for path in graphHopperResponse.paths {
+//                        let decodedPoints = self.decodePolyline(path.points, precision: 1e5) ?? []
+//                        let instructionIndices = path.instructions.flatMap { $0.interval }
+//                        uniqueIndices.formUnion(instructionIndices)
+//                        
+//                        let uniqueCoordinates = Array(uniqueIndices).sorted().compactMap { index in
+//                            index < decodedPoints.count ? decodedPoints[index] : nil
 //                        }
-                        waypoint.separatesLegs = false
-//                        waypoint.coordinateAccuracy = LocationAccuracy(100)
-                        selectedWayPoints.append(waypoint)
-                    }
-                
-//                    DispatchQueue.main.async {
-////                        let routeResponse = convertToRouteResponse(routes, with: options)
-//                        completionHandler(session, .success(selectedCoordinates))
+//                        
+//                        // Limiting to 100 coordinates if there are more
+////                        selectedCoordinates.append(contentsOf: uniqueCoordinates)
+//                        selectedCoordinates.append(contentsOf: decodedPoints)
+//                        
 //                    }
-                
-//                    completionHandler(matchSession, matchResult)
-//                    selectedWayPoints = [selectedWayPoints.first!, selectedWayPoints[10], selectedWayPoints.last!]
-
-                    DispatchQueue.main.async {
-                        var matchOptions = MatchOptions(waypoints: selectedWayPoints)
-//                        matchOptions.waypointIndices = [0, selectedCoordinates.count - 1]
-                        matchOptions.includesSpokenInstructions = true
-                        matchOptions.includesVisualInstructions = true
-                        matchOptions.includesSteps = true
-//                        matchOptions.resamplesTraces = true
-                        matchOptions.routeShapeResolution = .full
-                        matchOptions.profileIdentifier = .automobile
-//                        matchOptions.locale = .
-//                        matchOptions.waypoints = selectedWayPoints
-//                        var oldWaypoints = options.waypoints
-//                        options.waypoints = selectedWayPoints
-//                        self.calculatewtf(options) { matchSession, matchResult in
-//                        self.calculate(matchOptions) { (matchSession: (options: DirectionsOptions, credentials: Credentials), matchResult: Result<MapMatchingResponse, DirectionsError>)  in
+//                    
+//                    selectedCoordinates = self.selectCoordinates(selectedCoordinates, maxCount: 100)
+//                    
+//                    var selectedWayPoints:[Waypoint] = []
+//                    
+//                    var i = 0
+//                    for coordinate in selectedCoordinates {
+//                        var waypoint = Waypoint(coordinate: coordinate)
+////                        if i == 0 {
+////                            waypoint.separatesLegs = true
+////                        } else if i == selectedCoordinates.count-1 {
+////                            waypoint.separatesLegs = true
+////                        } else {
+////                            waypoint.separatesLegs = false
+////                        }
+//                        waypoint.separatesLegs = false
+////                        waypoint.coordinateAccuracy = LocationAccuracy(100)
+//                        selectedWayPoints.append(waypoint)
+//                    }
+//                
+////                    DispatchQueue.main.async {
+//////                        let routeResponse = convertToRouteResponse(routes, with: options)
+////                        completionHandler(session, .success(selectedCoordinates))
+////                    }
+//                
+////                    completionHandler(matchSession, matchResult)
+////                    selectedWayPoints = [selectedWayPoints.first!, selectedWayPoints[10], selectedWayPoints.last!]
+//
+//                    DispatchQueue.main.async {
+//                        var matchOptions = MatchOptions(waypoints: selectedWayPoints)
+////                        matchOptions.waypointIndices = [0, selectedCoordinates.count - 1]
+//                        matchOptions.includesSpokenInstructions = true
+//                        matchOptions.includesVisualInstructions = true
+//                        matchOptions.includesSteps = true
+////                        matchOptions.resamplesTraces = true
+//                        matchOptions.routeShapeResolution = .full
+//                        matchOptions.profileIdentifier = .automobile
+////                        matchOptions.locale = .
+////                        matchOptions.waypoints = selectedWayPoints
+////                        var oldWaypoints = options.waypoints
+////                        options.waypoints = selectedWayPoints
+////                        self.calculatewtf(options) { matchSession, matchResult in
+////                        self.calculate(matchOptions) { (matchSession: (options: DirectionsOptions, credentials: Credentials), matchResult: Result<MapMatchingResponse, DirectionsError>)  in
+////                            
+////                            switch matchResult {
+////                                case .success(let matches):
+////                                    do {
+////                                        var t = RouteOptions(matchOptions: matchOptions)
+////                                        var routeResponse = try RouteResponse(matching: matches, options: matchOptions, credentials: matchSession.credentials)
+////                                        routeResponse.options = .route(t)
+////                                        completionHandler(matchSession, .success(routeResponse))
+////                                    } catch {
+//////                                        completionHandler(matchSession, .failure(.unknown(response: error as! URLResponse)))
+////                                    }
+////                                case .failure(let error):
+////                                    completionHandler(matchSession, .failure(error))
+////                                }
+////
+////                            
+////////                            matchResult.
+////////                            matchSession.options = RouteOptions(matchOptions: matchSession.options)
+//////                            var routeResponse = RouteResponse(matching: matchResult., options: matchOptions, credentials: matchSession.credentials)
+////////                            let routeOptions = RouteOptions(matchOptions: matchSession.options)
+////////                            options.waypoints = oldWaypoints
+//////                            completionHandler(matchSession, routeResponse)
+////                        }
+//                        
+//                        self.calculateRoutes(matching: matchOptions) { (matchSession, matchResult)  in
 //                            
 //                            switch matchResult {
-//                                case .success(let matches):
+//                                case .success(var matches):
 //                                    do {
 //                                        var t = RouteOptions(matchOptions: matchOptions)
-//                                        var routeResponse = try RouteResponse(matching: matches, options: matchOptions, credentials: matchSession.credentials)
-//                                        routeResponse.options = .route(t)
-//                                        completionHandler(matchSession, .success(routeResponse))
+//                                        /*var routeResponse = try RouteResponse(matching: matches, options: matchOptions, credentials: matchSession.credentials)*/
+////                                        routeResponse.options = .route(t)
+//                                        
+////                                        matchResult.
+//                                        matches.options = .route(t)
+//                                        matches.options
+//                                        matches.identifier = "blurnywerby"
+//                                        completionHandler(matchSession, .success(matches))
 //                                    } catch {
 ////                                        completionHandler(matchSession, .failure(.unknown(response: error as! URLResponse)))
 //                                    }
@@ -572,51 +602,21 @@ open class Directions: NSObject {
 //////                            options.waypoints = oldWaypoints
 ////                            completionHandler(matchSession, routeResponse)
 //                        }
-                        
-                        self.calculateRoutes(matching: matchOptions) { (matchSession, matchResult)  in
-                            
-                            switch matchResult {
-                                case .success(var matches):
-                                    do {
-                                        var t = RouteOptions(matchOptions: matchOptions)
-                                        /*var routeResponse = try RouteResponse(matching: matches, options: matchOptions, credentials: matchSession.credentials)*/
-//                                        routeResponse.options = .route(t)
-                                        
-//                                        matchResult.
-                                        matches.options = .route(t)
-                                        matches.options
-                                        matches.identifier = "blurnywerby"
-                                        completionHandler(matchSession, .success(matches))
-                                    } catch {
-//                                        completionHandler(matchSession, .failure(.unknown(response: error as! URLResponse)))
-                                    }
-                                case .failure(let error):
-                                    completionHandler(matchSession, .failure(error))
-                                }
-
-                            
-////                            matchResult.
-////                            matchSession.options = RouteOptions(matchOptions: matchSession.options)
-//                            var routeResponse = RouteResponse(matching: matchResult., options: matchOptions, credentials: matchSession.credentials)
-////                            let routeOptions = RouteOptions(matchOptions: matchSession.options)
-////                            options.waypoints = oldWaypoints
-//                            completionHandler(matchSession, routeResponse)
-                        }
-                        
-                    }
-                } catch {
-                    DispatchQueue.main.async {
-                        let bailError = DirectionsError(code: nil, message: nil, response: response, underlyingError: error)
-                        completionHandler(session, .failure(bailError))
-                    }
-                }
-            }
-        }
-        requestTask.priority = 1
-        requestTask.resume()
-
-        return requestTask
-    }
+//                        
+//                    }
+//                } catch {
+//                    DispatchQueue.main.async {
+//                        let bailError = DirectionsError(code: nil, message: nil, response: response, underlyingError: error)
+//                        completionHandler(session, .failure(bailError))
+//                    }
+//                }
+//            }
+//        }
+//        requestTask.priority = 1
+//        requestTask.resume()
+//
+//        return requestTask
+//    }
 
     // Helper function to select a limited number of coordinates evenly
     func selectCoordinates(_ coordinates: [LocationCoordinate2D], maxCount: Int) -> [LocationCoordinate2D] {
@@ -648,184 +648,184 @@ open class Directions: NSObject {
         return request
     }
     
-    func convertToRouteResponse(_ graphHopperResponse: GraphHopperRouteResponse, with options: RouteOptions) -> RouteResponse {
-        var routes = [Route]()
-        var waypoints = [Waypoint]()
-
-        for path in graphHopperResponse.paths {
-            let coordinates: [LocationCoordinate2D] = decodePolyline(path.points, precision: 1e5) ?? []
-            waypoints = coordinates.map { Waypoint(coordinate: $0) }
-
-            let distance = path.distance
-            let expectedTravelTime = TimeInterval(path.time / 1000)  // Convert ms to seconds
-
-            var legs = [RouteLeg]()
-            var steps = [RouteStep]()
-
-            // Check if instructions exist; if they don't, this will skip processing them
-//            let instructions = path.instructions {
-            var first = true
-            for instruction in path.instructions {
-                // Extract coordinates for the step based on interval indices provided
-                if instruction.interval.count == 2,
-                   instruction.interval[0] < coordinates.count,
-                   instruction.interval[1] < coordinates.count {
-                    
-                    let start = instruction.interval[0]
-                    let end = instruction.interval[1]
-
-                    
-                    let stepCoordinatesSlice = coordinates[start...end]
-                    let stepCoordinates = Array(stepCoordinatesSlice)
-                    let lineString = LineString(stepCoordinates)
-                    
-                    let maneuverLocation = stepCoordinates.first ?? LocationCoordinate2D(latitude: 0, longitude: 0)
-                    
-                    let (maneuverType, maneuverDirection) = mapGraphHopperSignToMapbox(instruction.sign)
-
-                    
-                    var exitNames: [String]? = nil
-                    var exitNumbers: [String]? = nil
-
-                    // Handling roundabout exits and exit numbers
-                    if maneuverType == .takeRoundabout || maneuverType == .exitRoundabout {
-                        if let exitNumber = instruction.exit_number {
-                            exitNumbers = [String(exitNumber)]
-                            exitNames = [instruction.street_name]  // Assuming street_name gives the road name after the exit
-                        }
-                    }
-
-                    let visual = VisualInstructionBanner(
-                        distanceAlongStep: instruction.distance,
-                        primary: VisualInstruction(
-                            text: instruction.text,
-                            maneuverType: maneuverType,
-                            maneuverDirection: maneuverDirection,
-                            components: [VisualInstruction.Component.text(text: VisualInstruction.Component.TextRepresentation(text: instruction.text, abbreviation: nil, abbreviationPriority: nil))]// Additional components can be added here if needed
-                        ),
-                        secondary: nil,
-                        tertiary: nil,
-                        quaternary: nil,
-                        drivingSide: .left
-                    )
-
-                    let audio = SpokenInstruction(
-                        distanceAlongStep: instruction.distance,
-                        text: instruction.text,
-                        ssmlText: instruction.text  // Modify if different SSML text is required
-                    )
-
-                    
-                        let step = RouteStep(
-                            transportType: .automobile, // Assuming mode of transport; modify as needed
-                            maneuverLocation: maneuverLocation,
-                            maneuverType: .turn, // You may need a function to map from sign to ManeuverType
-                            maneuverDirection: maneuverDirection,
-                            instructions: instruction.text,
-//                            instructionsDisplayedAlongStep: [visual],
-//                            instructionsSpokenAlongStep: [audio],
-                            drivingSide: .left, // Assume 'right'; adjust based on actual data or settings
-                            distance: instruction.distance,
-                            expectedTravelTime: TimeInterval(instruction.time / 1000),
-                            intersections: [
-                                MapboxDirections.Intersection(location: maneuverLocation, headings: [0], approachIndex: 0, outletIndex: 0, outletIndexes: IndexSet(integer: 0), approachLanes: nil, usableApproachLanes: nil, preferredApproachLanes: nil, usableLaneIndication: nil),
-                                MapboxDirections.Intersection(location: stepCoordinates.last!, headings: [0], approachIndex: 0, outletIndex: 0, outletIndexes: IndexSet(integer: 0), approachLanes: nil, usableApproachLanes: nil, preferredApproachLanes: nil, usableLaneIndication: nil)
-                                           ]
-                        )
-                    step.instructionsDisplayedAlongStep = [visual]
-                    step.instructionsSpokenAlongStep = [audio]
-                    
-//                    let step = RouteStep(
-//                        transportType: .automobile,
-//                        maneuverLocation: stepCoordinates.last ?? LocationCoordinate2D(latitude: 0, longitude: 0),
-//                        maneuverType: first ? ManeuverType.depart : maneuverType,
-//                        maneuverDirection: maneuverDirection,
-//                        instructions: instruction.text,
-//                        initialHeading: 0,
-//                        finalHeading: 0,
-//                        drivingSide: .left,
-//                        exitCodes: exitNumbers,
-//                        exitNames: exitNames,
-//                        phoneticExitNames: exitNames,
-//                        distance: instruction.distance,
-//                        expectedTravelTime: TimeInterval(instruction.time / 1000),
-//                        typicalTravelTime: nil,
-//                        names: nil,
-//                        phoneticNames: nil,
-//                        codes: nil,
-//                        destinationCodes: nil,
-//                        destinations: nil,
-//                        intersections: [MapboxDirections.Intersection(location: maneuverLocation, headings: [0], approachIndex: 0, outletIndex: 0, outletIndexes: IndexSet(integer: 0), approachLanes: nil, usableApproachLanes: nil, preferredApproachLanes: nil, usableLaneIndication: nil)],
-//                        speedLimitSignStandard: nil,
-//                        speedLimitUnit: UnitSpeed.kilometersPerHour,
-//                        instructionsSpokenAlongStep: [audio],
-//                        instructionsDisplayedAlongStep: [visual],
-//                        administrativeAreaContainerByIntersection: nil,
-//                        segmentIndicesByIntersection: nil
-//                    )
-                    
-                    first = false
-                    
-//                        let step = RouteStep(
-//                            transportType: .automobile,
-//                            maneuverLocation: stepCoordinates.first ?? LocationCoordinate2D(latitude: 0, longitude: 0),
+//    func convertToRouteResponse(_ graphHopperResponse: GraphHopperRouteResponse, with options: RouteOptions) -> RouteResponse {
+//        var routes = [Route]()
+//        var waypoints = [Waypoint]()
+//
+//        for path in graphHopperResponse.paths {
+//            let coordinates: [LocationCoordinate2D] = decodePolyline(path.points, precision: 1e5) ?? []
+//            waypoints = coordinates.map { Waypoint(coordinate: $0) }
+//
+//            let distance = path.distance
+//            let expectedTravelTime = TimeInterval(path.time / 1000)  // Convert ms to seconds
+//
+//            var legs = [RouteLeg]()
+//            var steps = [RouteStep]()
+//
+//            // Check if instructions exist; if they don't, this will skip processing them
+////            let instructions = path.instructions {
+//            var first = true
+//            for instruction in path.instructions {
+//                // Extract coordinates for the step based on interval indices provided
+//                if instruction.interval.count == 2,
+//                   instruction.interval[0] < coordinates.count,
+//                   instruction.interval[1] < coordinates.count {
+//                    
+//                    let start = instruction.interval[0]
+//                    let end = instruction.interval[1]
+//
+//                    
+//                    let stepCoordinatesSlice = coordinates[start...end]
+//                    let stepCoordinates = Array(stepCoordinatesSlice)
+//                    let lineString = LineString(stepCoordinates)
+//                    
+//                    let maneuverLocation = stepCoordinates.first ?? LocationCoordinate2D(latitude: 0, longitude: 0)
+//                    
+//                    let (maneuverType, maneuverDirection) = mapGraphHopperSignToMapbox(instruction.sign)
+//
+//                    
+//                    var exitNames: [String]? = nil
+//                    var exitNumbers: [String]? = nil
+//
+//                    // Handling roundabout exits and exit numbers
+//                    if maneuverType == .takeRoundabout || maneuverType == .exitRoundabout {
+//                        if let exitNumber = instruction.exit_number {
+//                            exitNumbers = [String(exitNumber)]
+//                            exitNames = [instruction.street_name]  // Assuming street_name gives the road name after the exit
+//                        }
+//                    }
+//
+//                    let visual = VisualInstructionBanner(
+//                        distanceAlongStep: instruction.distance,
+//                        primary: VisualInstruction(
+//                            text: instruction.text,
 //                            maneuverType: maneuverType,
 //                            maneuverDirection: maneuverDirection,
+//                            components: [VisualInstruction.Component.text(text: VisualInstruction.Component.TextRepresentation(text: instruction.text, abbreviation: nil, abbreviationPriority: nil))]// Additional components can be added here if needed
+//                        ),
+//                        secondary: nil,
+//                        tertiary: nil,
+//                        quaternary: nil,
+//                        drivingSide: .left
+//                    )
+//
+//                    let audio = SpokenInstruction(
+//                        distanceAlongStep: instruction.distance,
+//                        text: instruction.text,
+//                        ssmlText: instruction.text  // Modify if different SSML text is required
+//                    )
+//
+//                    
+//                        let step = RouteStep(
+//                            transportType: .automobile, // Assuming mode of transport; modify as needed
+//                            maneuverLocation: maneuverLocation,
+//                            maneuverType: .turn, // You may need a function to map from sign to ManeuverType
+//                            maneuverDirection: maneuverDirection,
 //                            instructions: instruction.text,
-//                            instructionsDisplayedAlongStep: [visual],
-//                            instructionsSpokenAlongStep: [audio],
-//                            drivingSide: .right, // Assume right; this should be determined based on the locale or specific data
+////                            instructionsDisplayedAlongStep: [visual],
+////                            instructionsSpokenAlongStep: [audio],
+//                            drivingSide: .left, // Assume 'right'; adjust based on actual data or settings
 //                            distance: instruction.distance,
-//                            expectedTravelTime: TimeInterval(instruction.time / 1000), // Convert ms to seconds
-//                            exitNames: exitNames,
-//                            exitCodes: exitNumbers
+//                            expectedTravelTime: TimeInterval(instruction.time / 1000),
+//                            intersections: [
+//                                MapboxDirections.Intersection(location: maneuverLocation, headings: [0], approachIndex: 0, outletIndex: 0, outletIndexes: IndexSet(integer: 0), approachLanes: nil, usableApproachLanes: nil, preferredApproachLanes: nil, usableLaneIndication: nil),
+//                                MapboxDirections.Intersection(location: stepCoordinates.last!, headings: [0], approachIndex: 0, outletIndex: 0, outletIndexes: IndexSet(integer: 0), approachLanes: nil, usableApproachLanes: nil, preferredApproachLanes: nil, usableLaneIndication: nil)
+//                                           ]
 //                        )
-                    
-                    step.shape = lineString
-//                        step.
-                    
-                    steps.append(step)
-                }
-            }
-            
-            
-            
-            let leg = RouteLeg(
-                steps: steps,
-                name: path.instructions[0].text,
-                distance: path.distance,
-                expectedTravelTime: TimeInterval(path.time / 1000),
-                profileIdentifier: .automobile
-            )
-//            leg.
-            leg.destination = waypoints.last
-//            leg.segmentRangesByStep
-            legs.append(leg)
-
-            
+//                    step.instructionsDisplayedAlongStep = [visual]
+//                    step.instructionsSpokenAlongStep = [audio]
+//                    
+////                    let step = RouteStep(
+////                        transportType: .automobile,
+////                        maneuverLocation: stepCoordinates.last ?? LocationCoordinate2D(latitude: 0, longitude: 0),
+////                        maneuverType: first ? ManeuverType.depart : maneuverType,
+////                        maneuverDirection: maneuverDirection,
+////                        instructions: instruction.text,
+////                        initialHeading: 0,
+////                        finalHeading: 0,
+////                        drivingSide: .left,
+////                        exitCodes: exitNumbers,
+////                        exitNames: exitNames,
+////                        phoneticExitNames: exitNames,
+////                        distance: instruction.distance,
+////                        expectedTravelTime: TimeInterval(instruction.time / 1000),
+////                        typicalTravelTime: nil,
+////                        names: nil,
+////                        phoneticNames: nil,
+////                        codes: nil,
+////                        destinationCodes: nil,
+////                        destinations: nil,
+////                        intersections: [MapboxDirections.Intersection(location: maneuverLocation, headings: [0], approachIndex: 0, outletIndex: 0, outletIndexes: IndexSet(integer: 0), approachLanes: nil, usableApproachLanes: nil, preferredApproachLanes: nil, usableLaneIndication: nil)],
+////                        speedLimitSignStandard: nil,
+////                        speedLimitUnit: UnitSpeed.kilometersPerHour,
+////                        instructionsSpokenAlongStep: [audio],
+////                        instructionsDisplayedAlongStep: [visual],
+////                        administrativeAreaContainerByIntersection: nil,
+////                        segmentIndicesByIntersection: nil
+////                    )
+//                    
+//                    first = false
+//                    
+////                        let step = RouteStep(
+////                            transportType: .automobile,
+////                            maneuverLocation: stepCoordinates.first ?? LocationCoordinate2D(latitude: 0, longitude: 0),
+////                            maneuverType: maneuverType,
+////                            maneuverDirection: maneuverDirection,
+////                            instructions: instruction.text,
+////                            instructionsDisplayedAlongStep: [visual],
+////                            instructionsSpokenAlongStep: [audio],
+////                            drivingSide: .right, // Assume right; this should be determined based on the locale or specific data
+////                            distance: instruction.distance,
+////                            expectedTravelTime: TimeInterval(instruction.time / 1000), // Convert ms to seconds
+////                            exitNames: exitNames,
+////                            exitCodes: exitNumbers
+////                        )
+//                    
+//                    step.shape = lineString
+////                        step.
+//                    
+//                    steps.append(step)
+//                }
 //            }
-
-            let route = Route(
-                legs: legs,
-                shape: LineString(coordinates),
-                distance: distance,
-                expectedTravelTime: expectedTravelTime
-            )
-            
-            routes.append(route)
-        }
-
-        let routeResponse = RouteResponse(
-            httpResponse: nil,
-            identifier: UUID().uuidString,
-            routes: routes,
-            waypoints: waypoints,
-            options: .route(options),
-            credentials: self.credentials  // Assuming credentials are a property of options
-        )
-
-        return routeResponse
-    }
+//            
+//            
+//            
+//            let leg = RouteLeg(
+//                steps: steps,
+//                name: path.instructions[0].text,
+//                distance: path.distance,
+//                expectedTravelTime: TimeInterval(path.time / 1000),
+//                profileIdentifier: .automobile
+//            )
+////            leg.
+//            leg.destination = waypoints.last
+////            leg.segmentRangesByStep
+//            legs.append(leg)
+//
+//            
+////            }
+//
+//            let route = Route(
+//                legs: legs,
+//                shape: LineString(coordinates),
+//                distance: distance,
+//                expectedTravelTime: expectedTravelTime
+//            )
+//            
+//            routes.append(route)
+//        }
+//
+//        let routeResponse = RouteResponse(
+//            httpResponse: nil,
+//            identifier: UUID().uuidString,
+//            routes: routes,
+//            waypoints: waypoints,
+//            options: .route(options),
+//            credentials: self.credentials  // Assuming credentials are a property of options
+//        )
+//
+//        return routeResponse
+//    }
     
     
     func mapGraphHopperSignToMapbox(_ sign: Int) -> (ManeuverType, ManeuverDirection) {
